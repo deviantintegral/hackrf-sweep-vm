@@ -63,6 +63,37 @@ USB 3.0 ports radiate significant noise in the 2.4GHz band. For best results:
 
 ## Installation
 
+### Docker (Recommended)
+
+Build and run using Docker:
+
+```bash
+# Build the image
+docker build -t hackrf-spectrum-monitor .
+
+# Run the container with HackRF device access
+docker run --rm \
+    --device=/dev/bus/usb \
+    --network=host \
+    hackrf-spectrum-monitor \
+    --vm-url http://localhost:8428 \
+    --batch-interval 0.5
+```
+
+**Note**: The `--device=/dev/bus/usb` flag gives the container access to USB devices (required for HackRF). The `--network=host` flag allows the container to access localhost services like VictoriaMetrics.
+
+To run in detached mode:
+```bash
+docker run -d \
+    --name hackrf-monitor \
+    --device=/dev/bus/usb \
+    --network=host \
+    --restart=unless-stopped \
+    hackrf-spectrum-monitor
+```
+
+### Manual Installation
+
 ```bash
 # Clone/copy files
 sudo mkdir -p /opt/hackrf-monitor
