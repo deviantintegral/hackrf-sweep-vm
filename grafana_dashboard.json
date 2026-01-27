@@ -25,7 +25,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "hackrf_power_dbm",
+          "expr": "hackrf_power_dbm_value",
           "legendFormat": "{{freq_mhz}} MHz",
           "refId": "A"
         }
@@ -70,12 +70,12 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "zigbee_channel_power_avg{channel=~\"15|20|25|26\"}",
+          "expr": "zigbee_channel_power_avg_value{channel=~\"15|20|25|26\"}",
           "legendFormat": "Ch {{channel}} avg",
           "refId": "A"
         },
         {
-          "expr": "zigbee_channel_power_max{channel=~\"15|20|25|26\"}",
+          "expr": "zigbee_channel_power_max_value{channel=~\"15|20|25|26\"}",
           "legendFormat": "Ch {{channel}} peak",
           "refId": "B"
         }
@@ -113,7 +113,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "wifi_channel_power_avg",
+          "expr": "wifi_channel_power_avg_value",
           "legendFormat": "WiFi Ch {{channel}}",
           "refId": "A"
         }
@@ -139,7 +139,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "zigbee_channel_utilization{channel=~\"15|20|25|26\"}",
+          "expr": "zigbee_channel_utilization_value{channel=~\"15|20|25|26\"}",
           "legendFormat": "Ch {{channel}}",
           "refId": "A"
         }
@@ -177,7 +177,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "bottomk(1, zigbee_channel_power_avg{channel=~\"15|20|25|26\"})",
+          "expr": "bottomk(1, zigbee_channel_power_avg_value{channel=~\"15|20|25|26\"})",
           "legendFormat": "Channel {{channel}}",
           "refId": "A",
           "instant": true
@@ -208,7 +208,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "zigbee_channel_power_avg",
+          "expr": "zigbee_channel_power_avg_value",
           "legendFormat": "Ch {{channel}}",
           "refId": "A",
           "instant": true
@@ -247,7 +247,7 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "hackrf_sweeps_per_interval",
+          "expr": "hackrf_sweeps_per_interval_value",
           "legendFormat": "Sweeps/interval",
           "refId": "A"
         }
@@ -273,12 +273,12 @@
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
       "targets": [
         {
-          "expr": "hackrf_band_power_avg",
+          "expr": "hackrf_band_power_avg_value",
           "legendFormat": "Avg",
           "refId": "A"
         },
         {
-          "expr": "hackrf_band_power_max",
+          "expr": "hackrf_band_power_max_value",
           "legendFormat": "Max",
           "refId": "B"
         }

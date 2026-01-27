@@ -15,30 +15,30 @@ Monitor the 2.4GHz ISM band for interference affecting Zigbee networks. Pushes m
 
 ### Raw Spectrum (for waterfall plots)
 ```
-hackrf_power_dbm{freq_mhz="2405"} -82.5
-hackrf_power_dbm{freq_mhz="2406"} -84.2
+hackrf_power_dbm_value{freq_mhz="2405"} -82.5
+hackrf_power_dbm_value{freq_mhz="2406"} -84.2
 ...
 ```
 
 ### Zigbee Channel Aggregates (for alerting)
 ```
-zigbee_channel_power_avg{channel="15"} -78.3
-zigbee_channel_power_max{channel="15"} -62.1
-zigbee_channel_power_min{channel="15"} -92.4
-zigbee_channel_utilization{channel="15"} 23.5   # % above -75dBm
+zigbee_channel_power_avg_value{channel="15"} -78.3
+zigbee_channel_power_max_value{channel="15"} -62.1
+zigbee_channel_power_min_value{channel="15"} -92.4
+zigbee_channel_utilization_value{channel="15"} 23.5   # % above -75dBm
 ```
 
 ### WiFi Channels (for correlation)
 ```
-wifi_channel_power_avg{channel="1"} -65.2
-wifi_channel_power_max{channel="1"} -52.8
+wifi_channel_power_avg_value{channel="1"} -65.2
+wifi_channel_power_max_value{channel="1"} -52.8
 ```
 
 ### Monitor Health
 ```
-hackrf_sweeps_per_interval 47
-hackrf_band_power_avg -81.2
-hackrf_band_power_max -58.4
+hackrf_sweeps_per_interval_value 47
+hackrf_band_power_avg_value -81.2
+hackrf_band_power_max_value -58.4
 ```
 
 ## Prerequisites
@@ -151,7 +151,7 @@ python3 hackrf_spectrum_monitor.py \
 journalctl -u hackrf-spectrum-monitor -f
 
 # Query VictoriaMetrics directly
-curl -s 'http://localhost:8428/api/v1/query?query=zigbee_channel_power_avg'
+curl -s 'http://localhost:8428/api/v1/query?query=zigbee_channel_power_avg_value'
 ```
 
 ## Grafana Setup
