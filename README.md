@@ -74,27 +74,40 @@ Build and run using Docker:
 # Build the image
 docker build -t hackrf-spectrum-monitor .
 
-# Run the container with HackRF device access (uses default VM_URL=http://localhost:8428)
+# Run the container with HackRF device access (uses default settings)
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     hackrf-spectrum-monitor
 
-# Or override the VictoriaMetrics URL with environment variable
+# Override settings with environment variables
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     -e VM_URL=http://victoria-metrics:8428 \
+    -e LNA_GAIN=32 \
+    -e VGA_GAIN=20 \
+    -e BATCH_INTERVAL=0.5 \
+    -e BIN_WIDTH=1000000 \
     hackrf-spectrum-monitor
 
-# Or pass custom arguments directly
+# Or pass custom arguments directly (bypasses environment variables)
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     hackrf-spectrum-monitor \
     --vm-url http://custom-host:8428 \
+    --lna-gain 32 \
+    --vga-gain 20 \
     --batch-interval 0.5
 ```
+
+**Environment Variables:**
+- `VM_URL` - VictoriaMetrics URL (default: `http://localhost:8428`)
+- `LNA_GAIN` - LNA gain 0-40 dB (default: `32`)
+- `VGA_GAIN` - VGA gain 0-62 dB (default: `20`)
+- `BATCH_INTERVAL` - Seconds between metric flushes (default: `0.5`)
+- `BIN_WIDTH` - Frequency bin width in Hz (default: `1000000`)
 
 **Note**: The `--device=/dev/bus/usb` flag gives the container access to USB devices (required for HackRF). The `--network=host` flag allows the container to access localhost services like VictoriaMetrics.
 
@@ -106,6 +119,8 @@ docker run -d \
     --network=host \
     --restart=unless-stopped \
     -e VM_URL=http://localhost:8428 \
+    -e LNA_GAIN=32 \
+    -e VGA_GAIN=20 \
     hackrf-spectrum-monitor
 ```
 
