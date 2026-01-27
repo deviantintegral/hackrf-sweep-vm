@@ -1,0 +1,33 @@
+[Unit]
+Description=HackRF 2.4GHz Spectrum Monitor
+Documentation=https://github.com/your-repo/hackrf-spectrum-monitor
+After=network.target victoriametrics.service
+Wants=victoriametrics.service
+
+[Service]
+Type=simple
+User=hackrf
+Group=plugdev
+
+# Adjust path to where you installed the script
+ExecStart=/usr/bin/python3 /opt/hackrf-monitor/hackrf_spectrum_monitor.py \
+    --vm-url http://localhost:8428 \
+    --batch-interval 0.5 \
+    --lna-gain 32 \
+    --vga-gain 20
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+# Resource limits (optional, adjust as needed)
+MemoryMax=256M
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hackrf-spectrum
+
+[Install]
+WantedBy=multi-user.target

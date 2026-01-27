@@ -1,0 +1,114 @@
+# vmalert rules for Zigbee interference detection
+# Save as /etc/vmalert/rules/zigbee_interference.yml
+# 
+# Alert thresholds based on IEEE 802.15.4 specifications:
+# - Noise floor: typically -90 to -100 dBm in clean environment
+# - CCA threshold: -75 dBm (Clear Channel Assessment)
+# - Problematic interference: sustained > -65 dBm
+
+groups:
+  - name: zigbee_interference
+    interval: 30s
+    rules:
+      # Warning: Average power elevated on a Zigbee channel
+      - alert: ZigbeeChannelInterferenceWarning
+        expr: zigbee_channel_power_avg > -75
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Elevated interference on Zigbee channel {{ $labels.channel }}"
+          description: "Average power {{ $value | printf \"%.1f\" }} dBm exceeds -75 dBm threshold for 2+ minutes"
+          
+      # Critical: High sustained interference
+      - alert: ZigbeeChannelInterferenceCritical
+        expr: zigbee_channel_power_avg > -65
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical interference on Zigbee channel {{ $labels.channel }}"
+          description: "Average power {{ $value | printf \"%.1f\" }} dBm exceeds -65 dBm. Expect packet loss and device disconnections."
+          
+      # Burst interference (peak detection)
+      - alert: ZigbeeChannelBurstInterference
+        expr: zigbee_channel_power_max > -50
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Burst interference detected on Zigbee channel {{ $labels.channel }}"
+          description: "Peak power {{ $value | printf \"%.1f\" }} dBm detected. Possible WiFi, microwave oven, or other 2.4GHz device."
+          
+      # High channel utilization
+      - alert: ZigbeeChannelHighUtilization
+        expr: zigbee_channel_utilization > 50
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High utilization on Zigbee channel {{ $labels.channel }}"
+          description: "Channel is busy {{ $value | printf \"%.0f\" }}% of the time (above CCA threshold). Consider changing Zigbee channel."
+          
+      # Critical utilization - channel is unusable
+      - alert: ZigbeeChannelSaturated
+        expr: zigbee_channel_utilization > 80
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Zigbee channel {{ $labels.channel }} is saturated"
+          description: "Channel utilization at {{ $value | printf \"%.0f\" }}%. This channel is effectively unusable. Immediate channel change recommended."
+
+      # WiFi activity correlation
+      - alert: WiFiChannelHighActivity
+        expr: wifi_channel_power_avg > -60
+        for: 1m
+        labels:
+          severity: info
+        annotations:
+          summary: "High WiFi activity on channel {{ $labels.channel }}"
+          description: "WiFi channel {{ $labels.channel }} showing {{ $value | printf \"%.1f\" }} dBm average. May affect nearby Zigbee channels."
+
+  - name: hackrf_health
+    interval: 1m
+    rules:
+      # Monitor sweep rate to detect HackRF issues
+      - alert: HackRFLowSweepRate
+        expr: hackrf_sweeps_per_interval < 10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HackRF sweep rate is low"
+          description: "Only {{ $value }} sweeps per interval. Expected 25-50+. Check USB connection and hackrf_sweep process."
+          
+      # No data at all
+      - alert: HackRFNoData
+        expr: absent(hackrf_sweeps_per_interval) or hackrf_sweeps_per_interval == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No data from HackRF spectrum monitor"
+          description: "hackrf_spectrum_monitor.py may have crashed or HackRF disconnected."
+
+  - name: zigbee_channel_recommendations
+    interval: 5m
+    rules:
+      # Recording rules for channel selection
+      # These help identify the best Zigbee channel to use
+      
+      # Average interference score per channel (lower is better)
+      - record: zigbee:channel_interference_score:5m
+        expr: |
+          (
+            (zigbee_channel_power_avg + 100) * 0.4 +
+            (zigbee_channel_power_max + 100) * 0.3 +
+            zigbee_channel_utilization * 0.3
+          )
+          
+      # Rank channels by interference (1 = best)
+      - record: zigbee:channel_rank:5m
+        expr: |
+          rank(zigbee:channel_interference_score:5m)
