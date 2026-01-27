@@ -214,7 +214,7 @@
         "type": "prometheus",
         "uid": "${datasource}"
       },
-      "description": "% of time above CCA threshold (-75 dBm)",
+      "description": "% of time above CCA threshold (-55 dBFS)",
       "fieldConfig": {
         "defaults": {
           "mappings": [],
@@ -296,7 +296,7 @@
               "type": "linear"
             }
           },
-          "unit": "dBm"
+          "unit": "dBFS"
         },
         "overrides": []
       },
@@ -312,7 +312,7 @@
         "calculate": false,
         "cellGap": 0,
         "cellValues": {
-          "unit": "dBm"
+          "unit": "dBFS"
         },
         "color": {
           "exponent": 0.1,
@@ -424,11 +424,11 @@
               },
               {
                 "color": "yellow",
-                "value": -75
+                "value": -65
               },
               {
                 "color": "red",
-                "value": -65
+                "value": -55
               }
             ]
           },
@@ -671,11 +671,11 @@
               },
               {
                 "color": "yellow",
-                "value": -75
+                "value": -65
               },
               {
                 "color": "red",
-                "value": -65
+                "value": -55
               }
             ]
           },
