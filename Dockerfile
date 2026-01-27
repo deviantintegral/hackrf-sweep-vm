@@ -1,5 +1,5 @@
 # Use Alpine Linux as base image
-FROM alpine:latest
+FROM alpine:3.23
 
 # Install Python3 and HackRF tools from Alpine package repositories
 RUN apk add --no-cache \
