@@ -15,9 +15,6 @@ COPY hackrf_spectrum_monitor.py .
 # Make the script executable
 RUN chmod +x hackrf_spectrum_monitor.py
 
-# Set default VictoriaMetrics URL (can be overridden at runtime)
-ENV VM_URL=http://localhost:8428
-
 # Run the script by default
 ENTRYPOINT ["python3", "hackrf_spectrum_monitor.py"]
 
