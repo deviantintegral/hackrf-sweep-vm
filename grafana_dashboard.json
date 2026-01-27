@@ -26,13 +26,35 @@
       "targets": [
         {
           "expr": "hackrf_power_dbm_value",
-          "legendFormat": "{{freq_mhz}} MHz",
-          "refId": "A"
+          "legendFormat": "{{freq_mhz}}",
+          "refId": "A",
+          "format": "time_series"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "rows",
+            "valueLabel": "freq_mhz"
+          }
+        },
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "number",
+                "targetField": "freq_mhz"
+              }
+            ],
+            "fields": {}
+          }
         }
       ],
       "options": {
-        "calculate": false,
-        "cellGap": 0,
+        "calculate": true,
+        "cellGap": 1,
         "color": {
           "exponent": 0.5,
           "fill": "dark-orange",
