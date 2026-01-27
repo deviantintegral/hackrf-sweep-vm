@@ -126,7 +126,7 @@ class SpectrumMonitor:
             
             hz_low = int(parts[2])
             hz_high = int(parts[3])
-            bin_width = int(parts[4])
+            bin_width = int(float(parts[4]))  # Convert to float first in case of decimal format
             # parts[5] is num_samples, we don't need it
             power_values = [float(p) for p in parts[6:]]
             
