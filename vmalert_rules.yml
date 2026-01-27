@@ -12,7 +12,7 @@ groups:
     rules:
       # Warning: Average power elevated on a Zigbee channel
       - alert: ZigbeeChannelInterferenceWarning
-        expr: zigbee_channel_power_avg > -75
+        expr: zigbee_channel_power_avg_value > -75
         for: 2m
         labels:
           severity: warning
@@ -22,7 +22,7 @@ groups:
           
       # Critical: High sustained interference
       - alert: ZigbeeChannelInterferenceCritical
-        expr: zigbee_channel_power_avg > -65
+        expr: zigbee_channel_power_avg_value > -65
         for: 1m
         labels:
           severity: critical
@@ -32,7 +32,7 @@ groups:
           
       # Burst interference (peak detection)
       - alert: ZigbeeChannelBurstInterference
-        expr: zigbee_channel_power_max > -50
+        expr: zigbee_channel_power_max_value > -50
         for: 30s
         labels:
           severity: warning
@@ -42,7 +42,7 @@ groups:
           
       # High channel utilization
       - alert: ZigbeeChannelHighUtilization
-        expr: zigbee_channel_utilization > 50
+        expr: zigbee_channel_utilization_value > 50
         for: 5m
         labels:
           severity: warning
@@ -52,7 +52,7 @@ groups:
           
       # Critical utilization - channel is unusable
       - alert: ZigbeeChannelSaturated
-        expr: zigbee_channel_utilization > 80
+        expr: zigbee_channel_utilization_value > 80
         for: 2m
         labels:
           severity: critical
@@ -62,7 +62,7 @@ groups:
 
       # WiFi activity correlation
       - alert: WiFiChannelHighActivity
-        expr: wifi_channel_power_avg > -60
+        expr: wifi_channel_power_avg_value > -60
         for: 1m
         labels:
           severity: info
@@ -75,7 +75,7 @@ groups:
     rules:
       # Monitor sweep rate to detect HackRF issues
       - alert: HackRFLowSweepRate
-        expr: hackrf_sweeps_per_interval < 10
+        expr: hackrf_sweeps_per_interval_value < 10
         for: 2m
         labels:
           severity: warning
@@ -85,7 +85,7 @@ groups:
           
       # No data at all
       - alert: HackRFNoData
-        expr: absent(hackrf_sweeps_per_interval) or hackrf_sweeps_per_interval == 0
+        expr: absent(hackrf_sweeps_per_interval_value) or hackrf_sweeps_per_interval_value == 0
         for: 1m
         labels:
           severity: critical
@@ -103,9 +103,9 @@ groups:
       - record: zigbee:channel_interference_score:5m
         expr: |
           (
-            (zigbee_channel_power_avg + 100) * 0.4 +
-            (zigbee_channel_power_max + 100) * 0.3 +
-            zigbee_channel_utilization * 0.3
+            (zigbee_channel_power_avg_value + 100) * 0.4 +
+            (zigbee_channel_power_max_value + 100) * 0.3 +
+            zigbee_channel_utilization_value * 0.3
           )
           
       # Rank channels by interference (1 = best)
