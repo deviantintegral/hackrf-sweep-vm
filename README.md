@@ -71,12 +71,25 @@ Build and run using Docker:
 # Build the image
 docker build -t hackrf-spectrum-monitor .
 
-# Run the container with HackRF device access
+# Run the container with HackRF device access (uses default VM_URL=http://localhost:8428)
+docker run --rm \
+    --device=/dev/bus/usb \
+    --network=host \
+    hackrf-spectrum-monitor
+
+# Or override the VictoriaMetrics URL with environment variable
+docker run --rm \
+    --device=/dev/bus/usb \
+    --network=host \
+    -e VM_URL=http://victoria-metrics:8428 \
+    hackrf-spectrum-monitor
+
+# Or pass custom arguments directly
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     hackrf-spectrum-monitor \
-    --vm-url http://localhost:8428 \
+    --vm-url http://custom-host:8428 \
     --batch-interval 0.5
 ```
 
@@ -89,6 +102,7 @@ docker run -d \
     --device=/dev/bus/usb \
     --network=host \
     --restart=unless-stopped \
+    -e VM_URL=http://localhost:8428 \
     hackrf-spectrum-monitor
 ```
 
