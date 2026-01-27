@@ -1,10 +1,12 @@
 # vmalert rules for Zigbee interference detection
 # Save as /etc/vmalert/rules/zigbee_interference.yml
 # 
-# Alert thresholds based on IEEE 802.15.4 specifications:
-# - Noise floor: typically -90 to -100 dBm in clean environment
-# - CCA threshold: -75 dBm (Clear Channel Assessment)
-# - Problematic interference: sustained > -65 dBm
+# IMPORTANT: hackrf_sweep outputs dBFS (relative to ADC full scale), not dBm.
+# Alert thresholds are in dBFS and depend on gain settings.
+# With default gains (LNA=32, VGA=20):
+#   - Typical noise floor: -70 to -80 dBFS
+#   - Moderate activity: -55 to -65 dBFS  
+#   - Strong interference: > -50 dBFS
 
 groups:
   - name: zigbee_interference
@@ -12,33 +14,33 @@ groups:
     rules:
       # Warning: Average power elevated on a Zigbee channel
       - alert: ZigbeeChannelInterferenceWarning
-        expr: zigbee_channel_power_avg_value > -75
+        expr: zigbee_channel_power_avg_value > -65
         for: 2m
         labels:
           severity: warning
         annotations:
           summary: "Elevated interference on Zigbee channel {{ $labels.channel }}"
-          description: "Average power {{ $value | printf \"%.1f\" }} dBm exceeds -75 dBm threshold for 2+ minutes"
+          description: "Average power {{ $value | printf \"%.1f\" }} dBFS exceeds -65 dBFS threshold for 2+ minutes"
           
       # Critical: High sustained interference
       - alert: ZigbeeChannelInterferenceCritical
-        expr: zigbee_channel_power_avg_value > -65
+        expr: zigbee_channel_power_avg_value > -55
         for: 1m
         labels:
           severity: critical
         annotations:
           summary: "Critical interference on Zigbee channel {{ $labels.channel }}"
-          description: "Average power {{ $value | printf \"%.1f\" }} dBm exceeds -65 dBm. Expect packet loss and device disconnections."
+          description: "Average power {{ $value | printf \"%.1f\" }} dBFS exceeds -55 dBFS. Expect packet loss and device disconnections."
           
       # Burst interference (peak detection)
       - alert: ZigbeeChannelBurstInterference
-        expr: zigbee_channel_power_max_value > -50
+        expr: zigbee_channel_power_max_value > -40
         for: 30s
         labels:
           severity: warning
         annotations:
           summary: "Burst interference detected on Zigbee channel {{ $labels.channel }}"
-          description: "Peak power {{ $value | printf \"%.1f\" }} dBm detected. Possible WiFi, microwave oven, or other 2.4GHz device."
+          description: "Peak power {{ $value | printf \"%.1f\" }} dBFS detected. Possible WiFi, microwave oven, or other 2.4GHz device."
           
       # High channel utilization
       - alert: ZigbeeChannelHighUtilization
@@ -62,13 +64,13 @@ groups:
 
       # WiFi activity correlation
       - alert: WiFiChannelHighActivity
-        expr: wifi_channel_power_avg_value > -60
+        expr: wifi_channel_power_avg_value > -50
         for: 1m
         labels:
           severity: info
         annotations:
           summary: "High WiFi activity on channel {{ $labels.channel }}"
-          description: "WiFi channel {{ $labels.channel }} showing {{ $value | printf \"%.1f\" }} dBm average. May affect nearby Zigbee channels."
+          description: "WiFi channel {{ $labels.channel }} showing {{ $value | printf \"%.1f\" }} dBFS average. May affect nearby Zigbee channels."
 
   - name: hackrf_health
     interval: 1m

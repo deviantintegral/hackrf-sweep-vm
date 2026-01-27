@@ -185,8 +185,12 @@ class SpectrumMonitor:
             max_power = max(samples)
             min_power = min(samples)
             
-            # Calculate "utilization" - % of samples above CCA threshold (-75 dBm)
-            above_threshold = sum(1 for s in samples if s > -75)
+            # Calculate "utilization" - % of samples above CCA threshold
+            # Note: hackrf_sweep outputs dBFS (relative to ADC full scale), not dBm
+            # With typical gain settings (LNA=32, VGA=20), environmental noise is around -70 to -80 dBFS
+            # Threshold of -55 dBFS represents moderate/strong signals indicating channel activity
+            CCA_THRESHOLD_DBFS = -55
+            above_threshold = sum(1 for s in samples if s > CCA_THRESHOLD_DBFS)
             utilization = (above_threshold / len(samples)) * 100
             
             self.metrics_buffer.extend([
