@@ -19,14 +19,17 @@ hackrf_power_dbm{freq_mhz="2405"} -82.5
 hackrf_power_dbm{freq_mhz="2406"} -84.2
 ...
 ```
+**Note:** Despite the metric name `hackrf_power_dbm`, values are in **dBFS** (decibels relative to ADC full scale), not absolute dBm. To convert to dBm, you would need to calibrate for your specific device, gain settings, and antenna.
 
 ### Zigbee Channel Aggregates (for alerting)
 ```
 zigbee_channel_power_avg{channel="15"} -78.3
 zigbee_channel_power_max{channel="15"} -62.1
 zigbee_channel_power_min{channel="15"} -92.4
-zigbee_channel_utilization{channel="15"} 23.5   # % above -75dBm
+zigbee_channel_utilization{channel="15"} 23.5   # % above -55dBFS (channel activity)
 ```
+
+**Note:** Power values are in **dBFS** (decibels relative to ADC full scale), not dBm. The relationship between dBFS and absolute power (dBm) depends on gain settings, antenna, and other factors. With default gain settings (LNA=32, VGA=20), typical environmental noise appears around -70 to -80 dBFS.
 
 ### WiFi Channels (for correlation)
 ```
@@ -178,11 +181,13 @@ sudo systemctl restart vmalert
 
 ### Alert Thresholds
 
+**Note:** All power values are in dBFS with default gain settings (LNA=32, VGA=20).
+
 | Alert | Condition | Severity |
 |-------|-----------|----------|
-| InterferenceWarning | avg > -75 dBm for 2min | warning |
-| InterferenceCritical | avg > -65 dBm for 1min | critical |
-| BurstInterference | peak > -50 dBm for 30s | warning |
+| InterferenceWarning | avg > -65 dBFS for 2min | warning |
+| InterferenceCritical | avg > -55 dBFS for 1min | critical |
+| BurstInterference | peak > -40 dBFS for 30s | warning |
 | HighUtilization | >50% busy for 5min | warning |
 | ChannelSaturated | >80% busy for 2min | critical |
 
