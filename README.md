@@ -107,9 +107,11 @@ docker run --rm \
 - `VGA_GAIN` - VGA gain 0-62 dB (default: `20`)
 - `BATCH_INTERVAL` - Seconds between metric flushes (default: `0.5`)
 - `BIN_WIDTH` - Frequency bin width in Hz (default: `1000000`)
-- `FREQUENCY_RANGE` - Frequency range in MHz as min:max (default: `2400:2485` for full 2.4GHz ISM band)
+- `FREQUENCY_RANGE` - Frequency range in MHz as `min:max` with colon separator (default: `2400:2485` for full 2.4GHz ISM band)
 
 **Note**: The `--device=/dev/bus/usb` flag gives the container access to USB devices (required for HackRF). The `--network=host` flag allows the container to access localhost services like VictoriaMetrics.
+
+**Important**: The `FREQUENCY_RANGE` must use a colon (`:`) to separate min and max frequencies, not a space or other separator.
 
 To run in detached mode:
 ```bash
@@ -162,7 +164,7 @@ python3 hackrf_spectrum_monitor.py \
 --lna-gain         LNA gain 0-40 dB (default: 32)
 --vga-gain         VGA gain 0-62 dB (default: 20)
 --bin-width        Frequency bin width in Hz (default: 1000000 = 1MHz)
---frequency-range  Frequency range in MHz as min:max (default: 2400:2485)
+--frequency-range  Frequency range in MHz as min:max with colon (default: 2400:2485)
 ```
 
 ### Check it's working
