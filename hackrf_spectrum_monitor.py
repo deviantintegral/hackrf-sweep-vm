@@ -52,12 +52,14 @@ WIFI_CHANNELS = {
 
 class SpectrumMonitor:
     def __init__(self, vm_url: str, batch_interval: float = 0.5, 
-                 lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000):
+                 lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000,
+                 frequency_range: str = '2400:2485'):
         self.vm_url = vm_url.rstrip('/') + '/write'
         self.batch_interval = batch_interval
         self.lna_gain = lna_gain
         self.vga_gain = vga_gain
         self.bin_width = bin_width  # 1MHz default
+        self.frequency_range = frequency_range  # Frequency range in MHz (min:max)
         
         self.process: Optional[subprocess.Popen] = None
         self.running = False
@@ -78,7 +80,7 @@ class SpectrumMonitor:
         """Start hackrf_sweep in continuous mode."""
         cmd = [
             'hackrf_sweep',
-            '-f', '2400:2485',      # Full 2.4GHz ISM band
+            '-f', self.frequency_range,      # Frequency range (e.g., 2400:2485 for full 2.4GHz ISM band)
             '-w', str(self.bin_width),
             '-l', str(self.lna_gain),
             '-g', str(self.vga_gain),
@@ -318,6 +320,12 @@ def main():
         default=1000000,
         help='Frequency bin width in Hz (default: 1000000 = 1MHz)'
     )
+    parser.add_argument(
+        '--frequency-range',
+        type=str,
+        default='2400:2485',
+        help='Frequency range in MHz as min:max (default: 2400:2485 for full 2.4GHz ISM band)'
+    )
     
     args = parser.parse_args()
     
@@ -327,7 +335,8 @@ def main():
         batch_interval=args.batch_interval,
         lna_gain=args.lna_gain,
         vga_gain=args.vga_gain,
-        bin_width=args.bin_width
+        bin_width=args.bin_width,
+        frequency_range=args.frequency_range
     )
     
     signal.signal(signal.SIGTERM, lambda s, f: monitor.stop())
