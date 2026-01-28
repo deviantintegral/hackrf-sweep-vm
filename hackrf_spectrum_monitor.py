@@ -78,6 +78,13 @@ class SpectrumMonitor:
         
     def start_hackrf(self):
         """Start hackrf_sweep in continuous mode."""
+        # Validate frequency range format
+        if ':' not in self.frequency_range:
+            raise ValueError(
+                f"Invalid frequency range format: '{self.frequency_range}'. "
+                f"Expected format is 'min_freq:max_freq' (e.g., '2400:2485')"
+            )
+        
         cmd = [
             'hackrf_sweep',
             '-f', self.frequency_range,      # Frequency range (e.g., 2400:2485 for full 2.4GHz ISM band)
