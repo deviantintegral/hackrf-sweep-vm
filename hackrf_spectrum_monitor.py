@@ -3,11 +3,11 @@
 HackRF 2.4GHz Spectrum Monitor for VictoriaMetrics
 
 Continuously monitors the 2.4GHz ISM band and pushes metrics to VictoriaMetrics:
-- Raw frequency bins (~1MHz resolution) with peak (max) and noise floor (min) values
+- Raw frequency bins (~1MHz resolution) with configurable averaging modes
 - Pre-aggregated Zigbee channel metrics for alerting
 
 Usage:
-    python hackrf_spectrum_monitor.py [--vm-url http://localhost:8428] [--batch-interval 0.5] [--averaging-period 1.0]
+    python hackrf_spectrum_monitor.py [--vm-url http://localhost:8428] [--batch-interval 0.5] [--averaging-period 1.0] [--averaging-mode ema]
 """
 
 import subprocess
@@ -16,11 +16,12 @@ import time
 import argparse
 import signal
 import os
-from collections import defaultdict
+from collections import defaultdict, deque
 from datetime import datetime
 from typing import Optional
 import urllib.request
 import urllib.error
+import numpy as np
 
 # Zigbee 802.15.4 channel definitions (2.4GHz band)
 # Channel N has center frequency 2405 + 5*(N-11) MHz, bandwidth ~2MHz
@@ -51,11 +52,93 @@ WIFI_CHANNELS = {
 }
 
 
+class SpectrumAverager:
+    """
+    Handles averaging of spectrum data with multiple modes.
+    Correctly averages in linear domain (not dB) for mathematical accuracy.
+    """
+    def __init__(self, mode='ema', alpha=0.3, window_size=10):
+        """
+        Initialize the spectrum averager.
+        
+        Args:
+            mode: Averaging mode - 'ema', 'sma', 'peak', 'min', or 'none'
+            alpha: EMA smoothing factor (0.1=very smooth, 0.9=very responsive)
+            window_size: Number of frames for SMA
+        """
+        self.mode = mode
+        self.alpha = alpha
+        self.window_size = window_size
+        self.ema_state = None
+        self.sma_buffer = deque(maxlen=window_size)
+        self.peak_hold = None
+        self.min_hold = None
+    
+    def update(self, db_values):
+        """
+        Update the averager with new dB values.
+        
+        Args:
+            db_values: Single dB value or array of dB values
+            
+        Returns:
+            Averaged value(s) in dB
+        """
+        # Convert to numpy array and then to linear for correct averaging
+        db_array = np.array(db_values) if not isinstance(db_values, np.ndarray) else db_values
+        linear = 10 ** (db_array / 10)
+        
+        # Update all trackers
+        # EMA
+        if self.ema_state is None:
+            self.ema_state = linear
+        else:
+            self.ema_state = self.alpha * linear + (1 - self.alpha) * self.ema_state
+        
+        # SMA
+        self.sma_buffer.append(linear)
+        
+        # Peak/Min
+        if self.peak_hold is None:
+            self.peak_hold = linear.copy() if hasattr(linear, 'copy') else linear
+            self.min_hold = linear.copy() if hasattr(linear, 'copy') else linear
+        else:
+            self.peak_hold = np.maximum(self.peak_hold, linear)
+            self.min_hold = np.minimum(self.min_hold, linear)
+        
+        # Return based on mode
+        if self.mode == 'ema':
+            result = self.ema_state
+        elif self.mode == 'sma':
+            result = np.mean(self.sma_buffer, axis=0)
+        elif self.mode == 'peak':
+            result = self.peak_hold
+        elif self.mode == 'min':
+            result = self.min_hold
+        elif self.mode == 'none':
+            result = linear
+        else:
+            raise ValueError(f"Unknown averaging mode: {self.mode}")
+        
+        # Convert back to dB (avoid log(0))
+        return 10 * np.log10(result + 1e-10)
+    
+    def reset(self):
+        """Reset all averaging state."""
+        self.ema_state = None
+        self.sma_buffer.clear()
+        self.peak_hold = None
+        self.min_hold = None
+
+
 class SpectrumMonitor:
     def __init__(self, vm_url: str, batch_interval: float = 0.5, 
                  lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000,
                  frequency_range: str = '2400:2485',
-                 averaging_period: float = 1.0):
+                 averaging_period: float = 1.0,
+                 averaging_mode: str = 'ema',
+                 ema_alpha: float = 0.3,
+                 sma_window: int = 10):
         self.vm_url = vm_url.rstrip('/') + '/write'
         self.batch_interval = batch_interval
         self.lna_gain = lna_gain
@@ -67,6 +150,12 @@ class SpectrumMonitor:
         if averaging_period <= 0:
             raise ValueError(f"averaging_period must be positive, got {averaging_period}")
         self.averaging_period = averaging_period  # Period to average dB values
+        
+        # Initialize spectrum averager with configurable parameters
+        self.averaging_mode = averaging_mode
+        self.averagers: dict[int, SpectrumAverager] = {}  # One averager per frequency bin
+        self.ema_alpha = ema_alpha
+        self.sma_window = sma_window
         
         self.process: Optional[subprocess.Popen] = None
         self.running = False
@@ -186,18 +275,28 @@ class SpectrumMonitor:
         return (hz_low + bin_width * index + bin_width // 2) // 1_000_000
     
     def generate_aggregated_metrics(self, timestamp_ns: int):
-        """Generate aggregated raw bin metrics (max/min) from buffered power samples."""
+        """Generate aggregated raw bin metrics using configurable averaging mode."""
         for freq_mhz, samples in self.power_samples.items():
             if not samples:
                 continue
-            max_power = max(samples)  # Peak interference detection
-            min_power = min(samples)  # Noise floor baseline
             
-            # Emit both max (for interference) and min (for noise floor)
-            self.metrics_buffer.extend([
-                f"hackrf_power_dbm_max,freq_mhz={freq_mhz} value={max_power:.2f} {timestamp_ns}",
-                f"hackrf_noise_floor,freq_mhz={freq_mhz} value={min_power:.2f} {timestamp_ns}",
-            ])
+            # Get or create averager for this frequency bin
+            if freq_mhz not in self.averagers:
+                self.averagers[freq_mhz] = SpectrumAverager(
+                    mode=self.averaging_mode,
+                    alpha=self.ema_alpha,
+                    window_size=self.sma_window
+                )
+            
+            # Update averager with all samples (it will handle the aggregation)
+            for sample in samples:
+                averaged_value = self.averagers[freq_mhz].update(sample)
+            
+            # Emit the averaged value with mode-specific metric name
+            metric_name = f"hackrf_power_dbm_{self.averaging_mode}"
+            self.metrics_buffer.append(
+                f"{metric_name},freq_mhz={freq_mhz} value={averaged_value:.2f} {timestamp_ns}"
+            )
         
         # Clear the power samples buffer
         self.power_samples.clear()
@@ -249,7 +348,13 @@ class SpectrumMonitor:
         for ch, samples in self.channel_samples.items():
             if not samples:
                 continue
-            avg_power = sum(samples) / len(samples)
+            
+            # Convert to linear domain for correct averaging
+            linear_samples = 10 ** (np.array(samples) / 10)
+            avg_linear = np.mean(linear_samples)
+            avg_power = 10 * np.log10(avg_linear + 1e-10)
+            
+            # Max and min in dB domain (these are fine as-is)
             max_power = max(samples)
             min_power = min(samples)
             
@@ -268,7 +373,12 @@ class SpectrumMonitor:
         for ch, samples in self.wifi_samples.items():
             if not samples:
                 continue
-            avg_power = sum(samples) / len(samples)
+            
+            # Convert to linear domain for correct averaging
+            linear_samples = 10 ** (np.array(samples) / 10)
+            avg_linear = np.mean(linear_samples)
+            avg_power = 10 * np.log10(avg_linear + 1e-10)
+            
             max_power = max(samples)
             
             self.metrics_buffer.extend([
@@ -281,8 +391,13 @@ class SpectrumMonitor:
         for samples in self.channel_samples.values():
             all_samples.extend(samples)
         if all_samples:
+            # Convert to linear domain for correct averaging
+            linear_samples = 10 ** (np.array(all_samples) / 10)
+            avg_linear = np.mean(linear_samples)
+            avg_power = 10 * np.log10(avg_linear + 1e-10)
+            
             self.metrics_buffer.extend([
-                f"hackrf_band_power_avg value={sum(all_samples)/len(all_samples):.2f} {timestamp_ns}",
+                f"hackrf_band_power_avg value={avg_power:.2f} {timestamp_ns}",
                 f"hackrf_band_power_max value={max(all_samples):.2f} {timestamp_ns}",
                 f"hackrf_sweeps_per_interval value={self.sweep_count} {timestamp_ns}",
             ])
@@ -387,8 +502,41 @@ def main():
         '--averaging-period',
         type=float,
         default=default_averaging_period,
-        help='Period in seconds to aggregate dB values (emits max and min), must be > 0 (default: 1.0, can be set via AVERAGING_PERIOD env var)'
+        help='Period in seconds to aggregate values, must be > 0 (default: 1.0, can be set via AVERAGING_PERIOD env var)'
     )
+    
+    # Get default averaging mode from environment variable
+    default_averaging_mode = os.environ.get('AVERAGING_MODE', 'ema')
+    parser.add_argument(
+        '--averaging-mode',
+        type=str,
+        default=default_averaging_mode,
+        choices=['ema', 'sma', 'peak', 'min', 'none'],
+        help='Averaging mode: ema (Exponential Moving Average), sma (Simple Moving Average), '
+             'peak (Max Hold), min (Min Hold), none (no averaging). '
+             'Default: ema (can be set via AVERAGING_MODE env var)'
+    )
+    
+    # Get EMA alpha from environment variable
+    default_ema_alpha = float(os.environ.get('EMA_ALPHA', '0.3'))
+    parser.add_argument(
+        '--ema-alpha',
+        type=float,
+        default=default_ema_alpha,
+        help='EMA smoothing factor: 0.05-0.1 (very smooth), 0.2-0.4 (balanced), '
+             '0.5-0.7 (responsive), 0.9-1.0 (nearly raw). Default: 0.3 '
+             '(can be set via EMA_ALPHA env var)'
+    )
+    
+    # Get SMA window from environment variable
+    default_sma_window = int(os.environ.get('SMA_WINDOW', '10'))
+    parser.add_argument(
+        '--sma-window',
+        type=int,
+        default=default_sma_window,
+        help='Number of frames to average for SMA mode (default: 10, can be set via SMA_WINDOW env var)'
+    )
+    
     parser.add_argument(
         '--lna-gain',
         type=int,
@@ -424,7 +572,10 @@ def main():
         vga_gain=args.vga_gain,
         bin_width=args.bin_width,
         frequency_range=args.frequency_range,
-        averaging_period=args.averaging_period
+        averaging_period=args.averaging_period,
+        averaging_mode=args.averaging_mode,
+        ema_alpha=args.ema_alpha,
+        sma_window=args.sma_window
     )
     
     signal.signal(signal.SIGTERM, lambda s, f: monitor.stop())

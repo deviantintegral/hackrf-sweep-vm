@@ -5,21 +5,40 @@ Monitor the 2.4GHz ISM band for interference affecting Zigbee networks. Pushes m
 ## Features
 
 - **Continuous monitoring** - No process respawn overhead
-- **Raw spectrum data** - ~85 frequency bins at 1MHz resolution with peak (max) and noise floor (min) values
-- **Burst detection** - Captures WiFi and other intermittent interference with max-hold aggregation
+- **Raw spectrum data** - ~85 frequency bins at 1MHz resolution with configurable averaging modes
+- **Configurable averaging** - Choose from EMA, SMA, peak hold, min hold, or no averaging
+- **Correct linear-domain averaging** - Mathematically accurate power averaging
+- **Burst detection** - Captures WiFi and other intermittent interference with peak-hold mode
 - **Zigbee channel aggregates** - Pre-computed avg/max/min/utilization for channels 11-26
 - **WiFi correlation** - Tracks WiFi channels 1, 6, 11 to correlate interference sources
-- **Configurable aggregation** - Time-based max/min aggregation (default 1 second)
-- **Low overhead** - Pure Python, pushes via InfluxDB line protocol
+- **Low overhead** - Pure Python with numpy, pushes via InfluxDB line protocol
+
+## Averaging Modes
+
+The monitor supports multiple averaging modes for raw spectrum data:
+
+- **EMA (Exponential Moving Average)** - Memory-efficient, responsive, good for real-time displays
+  - Alpha 0.05-0.1: Very smooth, slow response (stable noise floor measurement)
+  - Alpha 0.2-0.4: Balanced (default: 0.3, general spectrum viewing)
+  - Alpha 0.5-0.7: Responsive with some smoothing (tracking changing signals)
+  - Alpha 0.9-1.0: Nearly raw (fast transient detection)
+- **SMA (Simple Moving Average)** - True average of last N frames (default: 10)
+- **Peak Hold** - Tracks maximum value per bin (useful for finding intermittent signals)
+- **Min Hold** - Tracks minimum value per bin (useful for finding noise floor)
+- **None** - No averaging, raw values passed through
+
+All averaging is performed in the linear power domain (not dB) for mathematical correctness.
 
 ## Metrics Exposed
 
 ### Raw Spectrum (for waterfall plots and interference detection)
+Metric name depends on averaging mode:
 ```
-hackrf_power_dbm_max_value{freq_mhz="2405"} -55.2   # Peak power (captures bursts)
-hackrf_noise_floor_value{freq_mhz="2405"} -85.1     # Minimum power (baseline)
-hackrf_power_dbm_max_value{freq_mhz="2406"} -54.8
-hackrf_noise_floor_value{freq_mhz="2406"} -84.9
+hackrf_power_dbm_ema_value{freq_mhz="2405"} -68.3    # EMA mode (default)
+hackrf_power_dbm_sma_value{freq_mhz="2405"} -67.8    # SMA mode
+hackrf_power_dbm_peak_value{freq_mhz="2405"} -55.2   # Peak hold mode
+hackrf_power_dbm_min_value{freq_mhz="2405"} -85.1    # Min hold mode
+hackrf_power_dbm_none_value{freq_mhz="2405"} -69.1   # No averaging
 ...
 ```
 
@@ -49,7 +68,7 @@ hackrf_band_power_max_value -58.4
 1. **HackRF One** with appropriate 2.4GHz antenna
 2. **hackrf tools** installed (`apt install hackrf` or build from source)
 3. **VictoriaMetrics** running and accessible
-4. **Python 3.7+** (no external dependencies!)
+4. **Python 3.7+** with **numpy** package
 
 ### Important: Antenna Selection
 
@@ -90,6 +109,9 @@ docker run --rm \
     -e BATCH_INTERVAL=0.5 \
     -e BIN_WIDTH=1000000 \
     -e FREQUENCY_RANGE=2400:2485 \
+    -e AVERAGING_MODE=ema \
+    -e EMA_ALPHA=0.3 \
+    -e SMA_WINDOW=10 \
     hackrf-spectrum-monitor
 
 # Or pass custom arguments directly (bypasses environment variables)
@@ -101,7 +123,10 @@ docker run --rm \
     --lna-gain 32 \
     --vga-gain 20 \
     --batch-interval 0.5 \
-    --frequency-range 2400:2485
+    --frequency-range 2400:2485 \
+    --averaging-mode peak \
+    --ema-alpha 0.3 \
+    --sma-window 10
 ```
 
 **Environment Variables:**
@@ -111,6 +136,10 @@ docker run --rm \
 - `BATCH_INTERVAL` - Seconds between metric flushes (default: `0.5`)
 - `BIN_WIDTH` - Frequency bin width in Hz (default: `1000000`)
 - `FREQUENCY_RANGE` - Frequency range in MHz as `min:max` with colon separator (default: `2400:2485` for full 2.4GHz ISM band)
+- `AVERAGING_PERIOD` - Seconds to aggregate values (default: `1.0`)
+- `AVERAGING_MODE` - Averaging mode: `ema`, `sma`, `peak`, `min`, or `none` (default: `ema`)
+- `EMA_ALPHA` - EMA smoothing factor 0.05-1.0 (default: `0.3`)
+- `SMA_WINDOW` - Number of frames for SMA (default: `10`)
 
 **Note**: The `--device=/dev/bus/usb` flag gives the container access to USB devices (required for HackRF). The `--network=host` flag allows the container to access localhost services like VictoriaMetrics.
 
@@ -157,14 +186,19 @@ python3 hackrf_spectrum_monitor.py \
     --batch-interval 0.5 \
     --lna-gain 32 \
     --vga-gain 20 \
-    --frequency-range 2400:2485
+    --frequency-range 2400:2485 \
+    --averaging-mode ema \
+    --ema-alpha 0.3
 ```
 
 ### Command-line options
 ```
 --vm-url            VictoriaMetrics URL (default: http://localhost:8428)
 --batch-interval    Seconds between metric flushes (default: 0.5)
---averaging-period  Seconds to aggregate max/min values (default: 1.0)
+--averaging-period  Seconds to aggregate values (default: 1.0)
+--averaging-mode    Averaging mode: ema, sma, peak, min, none (default: ema)
+--ema-alpha         EMA smoothing factor 0.05-1.0 (default: 0.3)
+--sma-window        Number of frames for SMA (default: 10)
 --lna-gain          LNA gain 0-40 dB (default: 32)
 --vga-gain          VGA gain 0-62 dB (default: 20)
 --bin-width         Frequency bin width in Hz (default: 1000000 = 1MHz)
