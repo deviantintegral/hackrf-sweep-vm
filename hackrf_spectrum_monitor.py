@@ -85,6 +85,29 @@ class SpectrumMonitor:
                 f"Expected format is 'min_freq:max_freq' (e.g., '2400:2485')"
             )
         
+        # Validate that we have exactly two numeric values
+        parts = self.frequency_range.split(':')
+        if len(parts) != 2:
+            raise ValueError(
+                f"Invalid frequency range format: '{self.frequency_range}'. "
+                f"Expected exactly one colon separating min and max frequencies (e.g., '2400:2485')"
+            )
+        
+        try:
+            min_freq = float(parts[0])
+            max_freq = float(parts[1])
+            if min_freq >= max_freq:
+                raise ValueError(
+                    f"Invalid frequency range: minimum ({min_freq}) must be less than maximum ({max_freq})"
+                )
+        except ValueError as e:
+            if "invalid literal" in str(e):
+                raise ValueError(
+                    f"Invalid frequency range format: '{self.frequency_range}'. "
+                    f"Both min and max must be numeric values (e.g., '2400:2485')"
+                )
+            raise
+        
         cmd = [
             'hackrf_sweep',
             '-f', self.frequency_range,      # Frequency range (e.g., 2400:2485 for full 2.4GHz ISM band)
