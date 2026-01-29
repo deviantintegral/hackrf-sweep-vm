@@ -111,6 +111,10 @@ class SpectrumMonitor:
                 self.process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.process.kill()
+        # Generate final averaged metrics from any remaining buffered samples
+        if self.power_samples:
+            timestamp_ns = int(time.time() * 1e9)
+            self.generate_averaged_metrics(timestamp_ns)
         # Flush remaining metrics
         self.flush_metrics()
         

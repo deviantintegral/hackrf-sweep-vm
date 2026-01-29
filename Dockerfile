@@ -23,4 +23,4 @@ ENV AVERAGING_PERIOD=1.0
 
 # Run the script by default with environment variable substitution
 # Using exec form with sh -c for secure environment variable expansion
-CMD ["sh", "-c", "exec python3 hackrf_spectrum_monitor.py --vm-url \"$VM_URL\" --batch-interval 0.5"]
+CMD ["sh", "-c", "exec python3 hackrf_spectrum_monitor.py --vm-url \"$VM_URL\" --batch-interval 0.5 --averaging-period \"$AVERAGING_PERIOD\""]
