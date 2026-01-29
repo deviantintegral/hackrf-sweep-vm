@@ -3,7 +3,7 @@
 HackRF 2.4GHz Spectrum Monitor for VictoriaMetrics
 
 Continuously monitors the 2.4GHz ISM band and pushes metrics to VictoriaMetrics:
-- Raw frequency bins (~1MHz resolution) for waterfall visualization, averaged over configurable period
+- Raw frequency bins (~1MHz resolution) with peak (max) and noise floor (min) values
 - Pre-aggregated Zigbee channel metrics for alerting
 
 Usage:
@@ -115,10 +115,10 @@ class SpectrumMonitor:
                 self.process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.process.kill()
-        # Generate final averaged metrics from any remaining buffered samples
+        # Generate final aggregated metrics from any remaining buffered samples
         if self.power_samples:
             timestamp_ns = int(time.time() * 1e9)
-            self.generate_averaged_metrics(timestamp_ns)
+            self.generate_aggregated_metrics(timestamp_ns)
         # Flush remaining metrics
         self.flush_metrics()
         
@@ -153,14 +153,19 @@ class SpectrumMonitor:
         """Get the center frequency in MHz for a bin."""
         return (hz_low + bin_width * index + bin_width // 2) // 1_000_000
     
-    def generate_averaged_metrics(self, timestamp_ns: int):
-        """Generate averaged raw bin metrics from buffered power samples."""
+    def generate_aggregated_metrics(self, timestamp_ns: int):
+        """Generate aggregated raw bin metrics (max/min) from buffered power samples."""
         for freq_mhz, samples in self.power_samples.items():
             if not samples:
                 continue
-            avg_power = sum(samples) / len(samples)
-            metric = f"hackrf_power_dbm,freq_mhz={freq_mhz} value={avg_power:.2f} {timestamp_ns}"
-            self.metrics_buffer.append(metric)
+            max_power = max(samples)  # Peak interference detection
+            min_power = min(samples)  # Noise floor baseline
+            
+            # Emit both max (for interference) and min (for noise floor)
+            self.metrics_buffer.extend([
+                f"hackrf_power_dbm_max,freq_mhz={freq_mhz} value={max_power:.2f} {timestamp_ns}",
+                f"hackrf_noise_floor,freq_mhz={freq_mhz} value={min_power:.2f} {timestamp_ns}",
+            ])
         
         # Clear the power samples buffer
         self.power_samples.clear()
@@ -193,10 +198,10 @@ class SpectrumMonitor:
         self.sweep_count += 1
         self.total_sweeps += 1
         
-        # Check if it's time to generate averaged metrics
+        # Check if it's time to generate aggregated metrics
         now = time.time()
         if now - self.last_averaging >= self.averaging_period:
-            self.generate_averaged_metrics(timestamp_ns)
+            self.generate_aggregated_metrics(timestamp_ns)
             self.last_averaging = now
         
         # Check if it's time to flush
@@ -350,7 +355,7 @@ def main():
         '--averaging-period',
         type=float,
         default=default_averaging_period,
-        help='Period in seconds to average dB values, must be > 0 (default: 1.0, can be set via AVERAGING_PERIOD env var)'
+        help='Period in seconds to aggregate dB values (emits max and min), must be > 0 (default: 1.0, can be set via AVERAGING_PERIOD env var)'
     )
     parser.add_argument(
         '--lna-gain',
