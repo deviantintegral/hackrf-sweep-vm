@@ -5,18 +5,21 @@ Monitor the 2.4GHz ISM band for interference affecting Zigbee networks. Pushes m
 ## Features
 
 - **Continuous monitoring** - No process respawn overhead
-- **Raw spectrum data** - ~85 frequency bins at 1MHz resolution for waterfall visualization
+- **Raw spectrum data** - ~85 frequency bins at 1MHz resolution with peak (max) and noise floor (min) values
+- **Burst detection** - Captures WiFi and other intermittent interference with max-hold aggregation
 - **Zigbee channel aggregates** - Pre-computed avg/max/min/utilization for channels 11-26
 - **WiFi correlation** - Tracks WiFi channels 1, 6, 11 to correlate interference sources
-- **Sub-second updates** - Configurable batch interval (default 500ms)
+- **Configurable aggregation** - Time-based max/min aggregation (default 1 second)
 - **Low overhead** - Pure Python, pushes via InfluxDB line protocol
 
 ## Metrics Exposed
 
-### Raw Spectrum (for waterfall plots)
+### Raw Spectrum (for waterfall plots and interference detection)
 ```
-hackrf_power_dbm_value{freq_mhz="2405"} -82.5
-hackrf_power_dbm_value{freq_mhz="2406"} -84.2
+hackrf_power_dbm_max_value{freq_mhz="2405"} -55.2   # Peak power (captures bursts)
+hackrf_noise_floor_value{freq_mhz="2405"} -85.1     # Minimum power (baseline)
+hackrf_power_dbm_max_value{freq_mhz="2406"} -54.8
+hackrf_noise_floor_value{freq_mhz="2406"} -84.9
 ...
 ```
 
@@ -159,12 +162,13 @@ python3 hackrf_spectrum_monitor.py \
 
 ### Command-line options
 ```
---vm-url           VictoriaMetrics URL (default: http://localhost:8428)
---batch-interval   Seconds between metric flushes (default: 0.5)
---lna-gain         LNA gain 0-40 dB (default: 32)
---vga-gain         VGA gain 0-62 dB (default: 20)
---bin-width        Frequency bin width in Hz (default: 1000000 = 1MHz)
---frequency-range  Frequency range in MHz as min:max with colon (default: 2400:2485)
+--vm-url            VictoriaMetrics URL (default: http://localhost:8428)
+--batch-interval    Seconds between metric flushes (default: 0.5)
+--averaging-period  Seconds to aggregate max/min values (default: 1.0)
+--lna-gain          LNA gain 0-40 dB (default: 32)
+--vga-gain          VGA gain 0-62 dB (default: 20)
+--bin-width         Frequency bin width in Hz (default: 1000000 = 1MHz)
+--frequency-range   Frequency range in MHz as min:max with colon (default: 2400:2485)
 ```
 
 ### Check it's working

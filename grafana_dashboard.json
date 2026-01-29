@@ -353,7 +353,7 @@
         {
           "editorMode": "builder",
           "exemplar": false,
-          "expr": "hackrf_power_dbm_value",
+          "expr": "hackrf_power_dbm_max_value",
           "format": "time_series",
           "instant": false,
           "legendFormat": "{{freq_mhz}}",
