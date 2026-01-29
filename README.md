@@ -74,29 +74,47 @@ Build and run using Docker:
 # Build the image
 docker build -t hackrf-spectrum-monitor .
 
-# Run the container with HackRF device access (uses default VM_URL=http://localhost:8428)
+# Run the container with HackRF device access (uses default settings)
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     hackrf-spectrum-monitor
 
-# Or override the VictoriaMetrics URL with environment variable
+# Override settings with environment variables
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     -e VM_URL=http://victoria-metrics:8428 \
+    -e LNA_GAIN=32 \
+    -e VGA_GAIN=20 \
+    -e BATCH_INTERVAL=0.5 \
+    -e BIN_WIDTH=1000000 \
+    -e FREQUENCY_RANGE=2400:2485 \
     hackrf-spectrum-monitor
 
-# Or pass custom arguments directly
+# Or pass custom arguments directly (bypasses environment variables)
 docker run --rm \
     --device=/dev/bus/usb \
     --network=host \
     hackrf-spectrum-monitor \
     --vm-url http://custom-host:8428 \
-    --batch-interval 0.5
+    --lna-gain 32 \
+    --vga-gain 20 \
+    --batch-interval 0.5 \
+    --frequency-range 2400:2485
 ```
 
+**Environment Variables:**
+- `VM_URL` - VictoriaMetrics URL (default: `http://localhost:8428`)
+- `LNA_GAIN` - LNA gain 0-40 dB (default: `32`)
+- `VGA_GAIN` - VGA gain 0-62 dB (default: `20`)
+- `BATCH_INTERVAL` - Seconds between metric flushes (default: `0.5`)
+- `BIN_WIDTH` - Frequency bin width in Hz (default: `1000000`)
+- `FREQUENCY_RANGE` - Frequency range in MHz as `min:max` with colon separator (default: `2400:2485` for full 2.4GHz ISM band)
+
 **Note**: The `--device=/dev/bus/usb` flag gives the container access to USB devices (required for HackRF). The `--network=host` flag allows the container to access localhost services like VictoriaMetrics.
+
+**Important**: The `FREQUENCY_RANGE` must use a colon (`:`) to separate min and max frequencies, not a space or other separator.
 
 To run in detached mode:
 ```bash
@@ -106,6 +124,8 @@ docker run -d \
     --network=host \
     --restart=unless-stopped \
     -e VM_URL=http://localhost:8428 \
+    -e LNA_GAIN=32 \
+    -e VGA_GAIN=20 \
     hackrf-spectrum-monitor
 ```
 
@@ -136,7 +156,8 @@ python3 hackrf_spectrum_monitor.py \
     --vm-url http://localhost:8428 \
     --batch-interval 0.5 \
     --lna-gain 32 \
-    --vga-gain 20
+    --vga-gain 20 \
+    --frequency-range 2400:2485
 ```
 
 ### Command-line options
@@ -147,6 +168,7 @@ python3 hackrf_spectrum_monitor.py \
 --lna-gain          LNA gain 0-40 dB (default: 32)
 --vga-gain          VGA gain 0-62 dB (default: 20)
 --bin-width         Frequency bin width in Hz (default: 1000000 = 1MHz)
+--frequency-range   Frequency range in MHz as min:max with colon (default: 2400:2485)
 ```
 
 ### Check it's working

@@ -54,12 +54,14 @@ WIFI_CHANNELS = {
 class SpectrumMonitor:
     def __init__(self, vm_url: str, batch_interval: float = 0.5, 
                  lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000,
+                 frequency_range: str = '2400:2485',
                  averaging_period: float = 1.0):
         self.vm_url = vm_url.rstrip('/') + '/write'
         self.batch_interval = batch_interval
         self.lna_gain = lna_gain
         self.vga_gain = vga_gain
         self.bin_width = bin_width  # 1MHz default
+        self.frequency_range = frequency_range  # Frequency range in MHz (min:max)
         
         # Validate averaging_period
         if averaging_period <= 0:
@@ -87,9 +89,39 @@ class SpectrumMonitor:
         
     def start_hackrf(self):
         """Start hackrf_sweep in continuous mode."""
+        # Validate frequency range format
+        if ':' not in self.frequency_range:
+            raise ValueError(
+                f"Invalid frequency range format: '{self.frequency_range}'. "
+                f"Expected format is 'min_freq:max_freq' (e.g., '2400:2485')"
+            )
+        
+        # Validate that we have exactly two numeric values
+        parts = self.frequency_range.split(':')
+        if len(parts) != 2:
+            raise ValueError(
+                f"Invalid frequency range format: '{self.frequency_range}'. "
+                f"Expected exactly one colon separating min and max frequencies (e.g., '2400:2485')"
+            )
+        
+        try:
+            min_freq = float(parts[0])
+            max_freq = float(parts[1])
+            if min_freq >= max_freq:
+                raise ValueError(
+                    f"Invalid frequency range: minimum ({min_freq}) must be less than maximum ({max_freq})"
+                )
+        except ValueError as e:
+            if "invalid literal" in str(e):
+                raise ValueError(
+                    f"Invalid frequency range format: '{self.frequency_range}'. "
+                    f"Both min and max must be numeric values (e.g., '2400:2485')"
+                )
+            raise
+        
         cmd = [
             'hackrf_sweep',
-            '-f', '2400:2485',      # Full 2.4GHz ISM band
+            '-f', self.frequency_range,      # Frequency range (e.g., 2400:2485 for full 2.4GHz ISM band)
             '-w', str(self.bin_width),
             '-l', str(self.lna_gain),
             '-g', str(self.vga_gain),
@@ -375,6 +407,12 @@ def main():
         default=1000000,
         help='Frequency bin width in Hz (default: 1000000 = 1MHz)'
     )
+    parser.add_argument(
+        '--frequency-range',
+        type=str,
+        default='2400:2485',
+        help='Frequency range in MHz as min:max (default: 2400:2485 for full 2.4GHz ISM band)'
+    )
     
     args = parser.parse_args()
     
@@ -385,6 +423,7 @@ def main():
         lna_gain=args.lna_gain,
         vga_gain=args.vga_gain,
         bin_width=args.bin_width,
+        frequency_range=args.frequency_range,
         averaging_period=args.averaging_period
     )
     
