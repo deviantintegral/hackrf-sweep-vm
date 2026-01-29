@@ -60,6 +60,10 @@ class SpectrumMonitor:
         self.lna_gain = lna_gain
         self.vga_gain = vga_gain
         self.bin_width = bin_width  # 1MHz default
+        
+        # Validate averaging_period
+        if averaging_period <= 0:
+            raise ValueError(f"averaging_period must be positive, got {averaging_period}")
         self.averaging_period = averaging_period  # Period to average dB values
         
         self.process: Optional[subprocess.Popen] = None
@@ -327,11 +331,26 @@ def main():
         default=0.5,
         help='Seconds between metric flushes (default: 0.5)'
     )
+    
+    # Get default from environment variable with error handling
+    default_averaging_period = 1.0
+    if 'AVERAGING_PERIOD' in os.environ:
+        try:
+            default_averaging_period = float(os.environ['AVERAGING_PERIOD'])
+            if default_averaging_period <= 0:
+                print(f"Warning: AVERAGING_PERIOD env var must be positive, using default 1.0", 
+                      file=sys.stderr)
+                default_averaging_period = 1.0
+        except ValueError:
+            print(f"Warning: Invalid AVERAGING_PERIOD env var '{os.environ['AVERAGING_PERIOD']}', "
+                  f"must be a number. Using default 1.0", file=sys.stderr)
+            default_averaging_period = 1.0
+    
     parser.add_argument(
         '--averaging-period',
         type=float,
-        default=float(os.environ.get('AVERAGING_PERIOD', '1.0')),
-        help='Period in seconds to average dB values (default: 1.0, can be set via AVERAGING_PERIOD env var)'
+        default=default_averaging_period,
+        help='Period in seconds to average dB values, must be > 0 (default: 1.0, can be set via AVERAGING_PERIOD env var)'
     )
     parser.add_argument(
         '--lna-gain',
