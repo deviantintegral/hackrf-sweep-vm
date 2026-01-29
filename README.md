@@ -133,10 +133,9 @@ docker run --rm \
 - `VM_URL` - VictoriaMetrics URL (default: `http://localhost:8428`)
 - `LNA_GAIN` - LNA gain 0-40 dB (default: `32`)
 - `VGA_GAIN` - VGA gain 0-62 dB (default: `20`)
-- `BATCH_INTERVAL` - Seconds between metric flushes (default: `0.5`)
+- `BATCH_INTERVAL` - Seconds between metric emissions and flushes (default: `0.5`)
 - `BIN_WIDTH` - Frequency bin width in Hz (default: `1000000`)
 - `FREQUENCY_RANGE` - Frequency range in MHz as `min:max` with colon separator (default: `2400:2485` for full 2.4GHz ISM band)
-- `AVERAGING_PERIOD` - Seconds to aggregate values (default: `1.0`)
 - `AVERAGING_MODE` - Averaging mode: `ema`, `sma`, `peak`, `min`, or `none` (default: `ema`)
 - `EMA_ALPHA` - EMA smoothing factor 0.05-1.0 (default: `0.3`)
 - `SMA_WINDOW` - Number of frames for SMA (default: `10`)
@@ -194,8 +193,7 @@ python3 hackrf_spectrum_monitor.py \
 ### Command-line options
 ```
 --vm-url            VictoriaMetrics URL (default: http://localhost:8428)
---batch-interval    Seconds between metric flushes (default: 0.5)
---averaging-period  Seconds to aggregate values (default: 1.0)
+--batch-interval    Seconds between metric emissions and flushes (default: 0.5)
 --averaging-mode    Averaging mode: ema, sma, peak, min, none (default: ema)
 --ema-alpha         EMA smoothing factor 0.05-1.0 (default: 0.3)
 --sma-window        Number of frames for SMA (default: 10)

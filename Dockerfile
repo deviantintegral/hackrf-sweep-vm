@@ -25,11 +25,10 @@ ENV BIN_WIDTH=1000000
 ENV FREQUENCY_RANGE=2400:2485
 
 # Set default averaging parameters
-ENV AVERAGING_PERIOD=1.0
 ENV AVERAGING_MODE=ema
 ENV EMA_ALPHA=0.3
 ENV SMA_WINDOW=10
 
 # Run the script by default with environment variable substitution
 # Using exec form with sh -c for secure environment variable expansion
-CMD ["sh", "-c", "exec python3 hackrf_spectrum_monitor.py --vm-url \"$VM_URL\" --batch-interval \"$BATCH_INTERVAL\" --lna-gain \"$LNA_GAIN\" --vga-gain \"$VGA_GAIN\" --bin-width \"$BIN_WIDTH\" --frequency-range \"$FREQUENCY_RANGE\" --averaging-period \"$AVERAGING_PERIOD\" --averaging-mode \"$AVERAGING_MODE\" --ema-alpha \"$EMA_ALPHA\" --sma-window \"$SMA_WINDOW\""]
+CMD ["sh", "-c", "exec python3 hackrf_spectrum_monitor.py --vm-url \"$VM_URL\" --batch-interval \"$BATCH_INTERVAL\" --lna-gain \"$LNA_GAIN\" --vga-gain \"$VGA_GAIN\" --bin-width \"$BIN_WIDTH\" --frequency-range \"$FREQUENCY_RANGE\" --averaging-mode \"$AVERAGING_MODE\" --ema-alpha \"$EMA_ALPHA\" --sma-window \"$SMA_WINDOW\""]

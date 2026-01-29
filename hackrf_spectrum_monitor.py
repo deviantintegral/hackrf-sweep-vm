@@ -135,7 +135,6 @@ class SpectrumMonitor:
     def __init__(self, vm_url: str, batch_interval: float = 0.5, 
                  lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000,
                  frequency_range: str = '2400:2485',
-                 averaging_period: float = 1.0,
                  averaging_mode: str = 'ema',
                  ema_alpha: float = 0.3,
                  sma_window: int = 10):
@@ -145,11 +144,6 @@ class SpectrumMonitor:
         self.vga_gain = vga_gain
         self.bin_width = bin_width  # 1MHz default
         self.frequency_range = frequency_range  # Frequency range in MHz (min:max)
-        
-        # Validate averaging_period
-        if averaging_period <= 0:
-            raise ValueError(f"averaging_period must be positive, got {averaging_period}")
-        self.averaging_period = averaging_period  # Period to average dB values
         
         # Initialize spectrum averager with configurable parameters
         self.averaging_mode = averaging_mode
@@ -161,10 +155,6 @@ class SpectrumMonitor:
         self.running = False
         self.metrics_buffer: list[str] = []
         self.last_flush = time.time()
-        
-        # Averaging buffer for raw dB values
-        self.power_samples: dict[int, list[float]] = defaultdict(list)
-        self.last_averaging = time.time()
         
         # Aggregation state for channel metrics
         self.channel_samples: dict[int, list[float]] = defaultdict(list)
@@ -236,10 +226,6 @@ class SpectrumMonitor:
                 self.process.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.process.kill()
-        # Generate final aggregated metrics from any remaining buffered samples
-        if self.power_samples:
-            timestamp_ns = int(time.time() * 1e9)
-            self.generate_aggregated_metrics(timestamp_ns)
         # Flush remaining metrics
         self.flush_metrics()
         
@@ -275,9 +261,54 @@ class SpectrumMonitor:
         return (hz_low + bin_width * index + bin_width // 2) // 1_000_000
     
     def generate_aggregated_metrics(self, timestamp_ns: int):
-        """Generate aggregated raw bin metrics using configurable averaging mode."""
-        for freq_mhz, samples in self.power_samples.items():
-            if not samples:
+        """Emit current state of all averagers as metrics."""
+        for freq_mhz, averager in self.averagers.items():
+            # Get current averaged value from the averager
+            # We need to query its current state without updating it
+            # For now, we'll emit based on the last update
+            if self.averaging_mode == 'ema':
+                if averager.ema_state is not None:
+                    result = 10 * np.log10(averager.ema_state + 1e-10)
+                else:
+                    continue
+            elif self.averaging_mode == 'sma':
+                if len(averager.sma_buffer) > 0:
+                    result = 10 * np.log10(np.mean(averager.sma_buffer, axis=0) + 1e-10)
+                else:
+                    continue
+            elif self.averaging_mode == 'peak':
+                if averager.peak_hold is not None:
+                    result = 10 * np.log10(averager.peak_hold + 1e-10)
+                else:
+                    continue
+            elif self.averaging_mode == 'min':
+                if averager.min_hold is not None:
+                    result = 10 * np.log10(averager.min_hold + 1e-10)
+                else:
+                    continue
+            elif self.averaging_mode == 'none':
+                # For 'none' mode, we don't have persistent state
+                # Skip emission as we'll emit immediately when samples arrive
+                continue
+            else:
+                continue
+            
+            # Emit the averaged value with mode-specific metric name
+            metric_name = f"hackrf_power_dbm_{self.averaging_mode}"
+            self.metrics_buffer.append(
+                f"{metric_name},freq_mhz={freq_mhz} value={result:.2f} {timestamp_ns}"
+            )
+        
+    def process_sweep(self, timestamp_ns: int, hz_low: int, hz_high: int, 
+                      bin_width: int, power_values: list[float]):
+        """Process a single sweep's worth of data."""
+        
+        # Process each raw bin value immediately
+        for i, power_dbm in enumerate(power_values):
+            freq_mhz = self.freq_to_mhz_bin(hz_low, bin_width, i)
+            
+            # Skip if outside our target range
+            if freq_mhz < 2400 or freq_mhz > 2485:
                 continue
             
             # Get or create averager for this frequency bin
@@ -288,33 +319,8 @@ class SpectrumMonitor:
                     window_size=self.sma_window
                 )
             
-            # Update averager with all samples (it will handle the aggregation)
-            for sample in samples:
-                averaged_value = self.averagers[freq_mhz].update(sample)
-            
-            # Emit the averaged value with mode-specific metric name
-            metric_name = f"hackrf_power_dbm_{self.averaging_mode}"
-            self.metrics_buffer.append(
-                f"{metric_name},freq_mhz={freq_mhz} value={averaged_value:.2f} {timestamp_ns}"
-            )
-        
-        # Clear the power samples buffer
-        self.power_samples.clear()
-        
-    def process_sweep(self, timestamp_ns: int, hz_low: int, hz_high: int, 
-                      bin_width: int, power_values: list[float]):
-        """Process a single sweep's worth of data."""
-        
-        # Buffer raw bin values for averaging
-        for i, power_dbm in enumerate(power_values):
-            freq_mhz = self.freq_to_mhz_bin(hz_low, bin_width, i)
-            
-            # Skip if outside our target range
-            if freq_mhz < 2400 or freq_mhz > 2485:
-                continue
-            
-            # Buffer the power value for averaging
-            self.power_samples[freq_mhz].append(power_dbm)
+            # Update averager immediately with this sample
+            self.averagers[freq_mhz].update(power_dbm)
             
             # Accumulate for Zigbee channel aggregation
             for ch, (center, low, high) in ZIGBEE_CHANNELS.items():
@@ -329,14 +335,10 @@ class SpectrumMonitor:
         self.sweep_count += 1
         self.total_sweeps += 1
         
-        # Check if it's time to generate aggregated metrics
+        # Check if it's time to flush and emit metrics
         now = time.time()
-        if now - self.last_averaging >= self.averaging_period:
-            self.generate_aggregated_metrics(timestamp_ns)
-            self.last_averaging = now
-        
-        # Check if it's time to flush
         if now - self.last_flush >= self.batch_interval:
+            self.generate_aggregated_metrics(timestamp_ns)
             self.flush_metrics()
             self.generate_channel_aggregates(timestamp_ns)
             self.last_flush = now
@@ -481,28 +483,7 @@ def main():
         '--batch-interval',
         type=float,
         default=0.5,
-        help='Seconds between metric flushes (default: 0.5)'
-    )
-    
-    # Get default from environment variable with error handling
-    default_averaging_period = 1.0
-    if 'AVERAGING_PERIOD' in os.environ:
-        try:
-            default_averaging_period = float(os.environ['AVERAGING_PERIOD'])
-            if default_averaging_period <= 0:
-                print(f"Warning: AVERAGING_PERIOD env var must be positive, using default 1.0", 
-                      file=sys.stderr)
-                default_averaging_period = 1.0
-        except ValueError:
-            print(f"Warning: Invalid AVERAGING_PERIOD env var '{os.environ['AVERAGING_PERIOD']}', "
-                  f"must be a number. Using default 1.0", file=sys.stderr)
-            default_averaging_period = 1.0
-    
-    parser.add_argument(
-        '--averaging-period',
-        type=float,
-        default=default_averaging_period,
-        help='Period in seconds to aggregate values, must be > 0 (default: 1.0, can be set via AVERAGING_PERIOD env var)'
+        help='Seconds between metric emissions and flushes (default: 0.5)'
     )
     
     # Get default averaging mode from environment variable
@@ -572,7 +553,6 @@ def main():
         vga_gain=args.vga_gain,
         bin_width=args.bin_width,
         frequency_range=args.frequency_range,
-        averaging_period=args.averaging_period,
         averaging_mode=args.averaging_mode,
         ema_alpha=args.ema_alpha,
         sma_window=args.sma_window
