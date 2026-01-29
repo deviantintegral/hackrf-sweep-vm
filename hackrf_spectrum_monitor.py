@@ -3,11 +3,11 @@
 HackRF 2.4GHz Spectrum Monitor for VictoriaMetrics
 
 Continuously monitors the 2.4GHz ISM band and pushes metrics to VictoriaMetrics:
-- Raw frequency bins (~1MHz resolution) for waterfall visualization
+- Raw frequency bins (~1MHz resolution) for waterfall visualization, averaged over configurable period
 - Pre-aggregated Zigbee channel metrics for alerting
 
 Usage:
-    python hackrf_spectrum_monitor.py [--vm-url http://localhost:8428] [--batch-interval 0.5]
+    python hackrf_spectrum_monitor.py [--vm-url http://localhost:8428] [--batch-interval 0.5] [--averaging-period 1.0]
 """
 
 import subprocess
@@ -15,6 +15,7 @@ import sys
 import time
 import argparse
 import signal
+import os
 from collections import defaultdict
 from datetime import datetime
 from typing import Optional
@@ -52,17 +53,23 @@ WIFI_CHANNELS = {
 
 class SpectrumMonitor:
     def __init__(self, vm_url: str, batch_interval: float = 0.5, 
-                 lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000):
+                 lna_gain: int = 32, vga_gain: int = 20, bin_width: int = 1000000,
+                 averaging_period: float = 1.0):
         self.vm_url = vm_url.rstrip('/') + '/write'
         self.batch_interval = batch_interval
         self.lna_gain = lna_gain
         self.vga_gain = vga_gain
         self.bin_width = bin_width  # 1MHz default
+        self.averaging_period = averaging_period  # Period to average dB values
         
         self.process: Optional[subprocess.Popen] = None
         self.running = False
         self.metrics_buffer: list[str] = []
         self.last_flush = time.time()
+        
+        # Averaging buffer for raw dB values
+        self.power_samples: dict[int, list[float]] = defaultdict(list)
+        self.last_averaging = time.time()
         
         # Aggregation state for channel metrics
         self.channel_samples: dict[int, list[float]] = defaultdict(list)
@@ -137,22 +144,33 @@ class SpectrumMonitor:
     def freq_to_mhz_bin(self, hz_low: int, bin_width: int, index: int) -> int:
         """Get the center frequency in MHz for a bin."""
         return (hz_low + bin_width * index + bin_width // 2) // 1_000_000
+    
+    def generate_averaged_metrics(self, timestamp_ns: int):
+        """Generate averaged raw bin metrics from buffered power samples."""
+        for freq_mhz, samples in self.power_samples.items():
+            if not samples:
+                continue
+            avg_power = sum(samples) / len(samples)
+            metric = f"hackrf_power_dbm,freq_mhz={freq_mhz} value={avg_power:.2f} {timestamp_ns}"
+            self.metrics_buffer.append(metric)
+        
+        # Clear the power samples buffer
+        self.power_samples.clear()
         
     def process_sweep(self, timestamp_ns: int, hz_low: int, hz_high: int, 
                       bin_width: int, power_values: list[float]):
         """Process a single sweep's worth of data."""
         
-        # Generate raw bin metrics
+        # Buffer raw bin values for averaging
         for i, power_dbm in enumerate(power_values):
             freq_mhz = self.freq_to_mhz_bin(hz_low, bin_width, i)
             
             # Skip if outside our target range
             if freq_mhz < 2400 or freq_mhz > 2485:
                 continue
-                
-            # Raw frequency bin metric (for waterfall visualization)
-            metric = f"hackrf_power_dbm,freq_mhz={freq_mhz} value={power_dbm:.2f} {timestamp_ns}"
-            self.metrics_buffer.append(metric)
+            
+            # Buffer the power value for averaging
+            self.power_samples[freq_mhz].append(power_dbm)
             
             # Accumulate for Zigbee channel aggregation
             for ch, (center, low, high) in ZIGBEE_CHANNELS.items():
@@ -167,8 +185,13 @@ class SpectrumMonitor:
         self.sweep_count += 1
         self.total_sweeps += 1
         
-        # Check if it's time to flush
+        # Check if it's time to generate averaged metrics
         now = time.time()
+        if now - self.last_averaging >= self.averaging_period:
+            self.generate_averaged_metrics(timestamp_ns)
+            self.last_averaging = now
+        
+        # Check if it's time to flush
         if now - self.last_flush >= self.batch_interval:
             self.flush_metrics()
             self.generate_channel_aggregates(timestamp_ns)
@@ -301,6 +324,12 @@ def main():
         help='Seconds between metric flushes (default: 0.5)'
     )
     parser.add_argument(
+        '--averaging-period',
+        type=float,
+        default=float(os.environ.get('AVERAGING_PERIOD', '1.0')),
+        help='Period in seconds to average dB values (default: 1.0, can be set via AVERAGING_PERIOD env var)'
+    )
+    parser.add_argument(
         '--lna-gain',
         type=int,
         default=32,
@@ -327,7 +356,8 @@ def main():
         batch_interval=args.batch_interval,
         lna_gain=args.lna_gain,
         vga_gain=args.vga_gain,
-        bin_width=args.bin_width
+        bin_width=args.bin_width,
+        averaging_period=args.averaging_period
     )
     
     signal.signal(signal.SIGTERM, lambda s, f: monitor.stop())

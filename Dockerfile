@@ -18,6 +18,9 @@ RUN chmod +x hackrf_spectrum_monitor.py
 # Set default VictoriaMetrics URL (can be overridden at runtime with -e VM_URL=...)
 ENV VM_URL=http://localhost:8428
 
+# Set default averaging period in seconds (can be overridden at runtime with -e AVERAGING_PERIOD=...)
+ENV AVERAGING_PERIOD=1.0
+
 # Run the script by default with environment variable substitution
 # Using exec form with sh -c for secure environment variable expansion
 CMD ["sh", "-c", "exec python3 hackrf_spectrum_monitor.py --vm-url \"$VM_URL\" --batch-interval 0.5"]
